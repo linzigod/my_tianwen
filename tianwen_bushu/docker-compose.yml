@@ -1,0 +1,127 @@
+# host 版本。
+version: '3.3'
+services:
+  pg:
+    image: ankane/pgvector:v0.4.2 # dockerhub
+    # image: registry.cn-hangzhou.aliyuncs.com/fastgpt/pgvector:v0.4.2 # 阿里云
+    container_name: pg
+    restart: always
+    ports:
+      - 8100:5432
+    networks:
+      - tianwen_net
+    environment:
+      # 这里的配置只有首次运行生效。修改后，重启镜像是不会生效的。需要把持久化数据删除再重启，才有效果
+      - POSTGRES_USER=fastgpt
+      - POSTGRES_PASSWORD=1234
+      - POSTGRES_DB=fastgpt
+      
+    volumes:
+      # 刚创建的文件
+      - ./pg/init.sql:/docker-entrypoint-initdb.d/init.sh
+      - ./pg/data:/var/lib/postgresql/data
+  mongo:
+    image: mongo:5.0.18
+    # image: registry.cn-hangzhou.aliyuncs.com/fastgpt/mongo:5.0.18 # 阿里云
+    container_name: mongo
+    restart: always
+    ports:
+      - 27017:27017
+    networks:
+      - tianwen_net
+    environment:
+      # 这里的配置只有首次运行生效。修改后，重启镜像是不会生效的。需要把持久化数据删除再重启，才有效果
+      - MONGO_INITDB_ROOT_USERNAME=username
+      - MONGO_INITDB_ROOT_PASSWORD=password
+
+      - TZ=Asia/Shanghai
+
+      # - "MONGO_TLS_ENABLED=true"
+      # - "MONGO_TLS_DISABLED_PROTOCOLS=TLS1_0,TLS1_1"
+
+      # - "MONGO_TCP_FASTOPEN_SERVER=true"
+      # - "MONGO_TCP_FASTOPEN_CLIENT=true"
+      # - "MONGO_TCP_FASTOPEN_QUEUE_SIZE=128"
+    volumes:
+      - ./mongo/data:/data/db
+      - ./mongo/logs:/var/log/mongodb
+  fastgpt:
+    image: my_tianwen_client:v1
+    # image: c121914yu/fast-gpt:latest # docker hub
+    # image: registry.cn-hangzhou.aliyuncs.com/fastgpt/fastgpt:latest # 阿里云
+    # network_mode: host #
+    restart: always
+    container_name: fastgpt
+    # hostname: myweb
+    ports:
+      - 3000:3000
+    networks:
+      - tianwen_net
+    depends_on:
+      - mongo
+      - pg
+    environment:
+      # 可选的变量，不需要的话需要去掉
+      - PORT=3000 # 运行的端口地址，如果不是 3000，需要修改成实际地址。
+      - DB_MAX_LINK=15 # database max link
+      # proxy（可选）
+      # - AXIOS_PROXY_HOST=127.0.0.1
+      # - AXIOS_PROXY_PORT=7890
+      # 发送邮箱验证码配置。用的是QQ邮箱。参考 nodeMail 获取MAILE_CODE，自行百度。
+      - MY_MAIL=2104796623@qq.com
+      - MAILE_CODE=xfjmhxnztgyweihb
+      # 阿里短信服务（邮箱和短信至少二选一）
+      # - aliAccessKeyId=xxxx
+      # - aliAccessKeySecret=xxxx
+      # - aliSignName=xxxxx
+      # - aliTemplateCode=SMS_xxxx
+      # google V3 安全校验（可选）
+      # - CLIENT_GOOGLE_VER_TOKEN=xxx
+      # - SERVICE_GOOGLE_VER_TOKEN=xx
+      # token加密凭证（随便填，作为登录凭证）
+      - TOKEN_KEY=any
+      # root key, 最高权限，可以内部接口互相调用
+      - ROOT_KEY=root_key
+      # 和上方mongo镜像的username,password对应
+      - MONGODB_URI=mongodb://username:password@mongo:27017/?authSource=admin
+      - MONGODB_NAME=fastgpt
+      - PG_HOST=pg
+      - PG_PORT=5432
+      # 和上方PG镜像对应.
+      - PG_USER=fastgpt
+      - PG_PASSWORD=1234
+      - PG_DB_NAME=fastgpt
+      # oneapi 配置 推荐使用 one-api 管理key
+      # - ONEAPI_URL=https://iqvoagncexmm.cloud.sealos.io/v1
+      # - ONEAPI_KEY=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
+      # openai, 推荐使用 one-api 管理key
+
+      - OPENAIKEY=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
+      - OPENAI_BASE_URL=https://iqvoagncexmm.cloud.sealos.io/openai/v1
+      - OPENAI_BASE_URL_AUTH=auth
+    volumes:
+      - F:\project\my_tianwen\client\public:/app/public
+      - F:\project\my_tianwen\client\src:/app/src
+  fastgpt-admin:
+    image: tianwen_admin:v1
+    # image: registry.cn-hangzhou.aliyuncs.com/fastgpt/fastgpt-admin:latest
+    container_name: fastgpt-admin
+    restart: always
+    ports:
+      - 3001:3001
+    networks:
+      - tianwen_net
+    depends_on:
+      - mongo
+      - fastgpt
+    environment:
+      - MONGODB_URI=mongodb://username:password@mongo:27017/?authSource=admin
+      - MONGODB_NAME=fastgpt
+      - ADMIN_USER=username
+      - ADMIN_PASS=password
+      - ADMIN_SECRET=any
+      - PARENT_URL=http://0.0.0.0:3000
+      - PARENT_ROOT_KEY=root_key
+
+networks:
+  tianwen_net:
